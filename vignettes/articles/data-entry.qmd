@@ -14,7 +14,7 @@ session only; run the app locally for confidential data.
 
 ```{=html}
 <iframe id="bayesmadatr-app"
-        src="https://REPLACE-WITH-APP-ID.share.connect.posit.cloud/"
+        src="https://01a1ba7b-99b3-d5df-2660-d97b1591e2c1.share.connect.posit.cloud"
         style="width: 100%; min-height: 900px; border: none; display: block;"
         scrolling="no">
 </iframe>

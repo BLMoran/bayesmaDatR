@@ -1,0 +1,8 @@
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
+/.quarto/
+vignettes/.quarto/
+vignettes/articles/*_files/
+inst/shiny/data_entry/rsconnect/

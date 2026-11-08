@@ -1,7 +1,5 @@
 # bayesmaDatR: Data Management for Bayesian Meta-Analysis
 
-![bayesmaDatR package hex logo](reference/figures/bayesmaDatR_hex.png)
-
 An interactive workbook manager and data-preparation toolkit for
 Bayesian meta-analysis. Start with the Excel file you already use,
 organise study and outcome data, then prepare arm-level or two-stage
@@ -34,6 +32,7 @@ analysis pipeline.
 ## Interactive workflow
 
 ``` r
+
 library(bayesmaDatR)
 
 launch_data_entry()
@@ -47,6 +46,7 @@ Start with
 to see the recommended columns:
 
 ``` r
+
 template <- template_ma_data()
 write_ma_workbook(template, "bayesmaDatR_template.xlsx")
 ```
@@ -54,6 +54,7 @@ write_ma_workbook(template, "bayesmaDatR_template.xlsx")
 ## R workflow
 
 ``` r
+
 dat <- read_ma_workbook("review.xlsx")
 validate_ma_data(dat)
 

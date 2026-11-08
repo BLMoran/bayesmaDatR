@@ -1,6 +1,4 @@
-# bayesmaDatR: Data Management for Bayesian Meta-Analysis
-
-<img src="man/figures/bayesmaDatR_hex.png" align="right" width="175" alt="bayesmaDatR package hex logo" />
+# bayesmaDatR: Data Management for Bayesian Meta-Analysis <img src="man/figures/logo.png" align="right" height="139" alt="bayesmaDatR package hex logo" />
 
 An interactive workbook manager and data-preparation toolkit for Bayesian
 meta-analysis. Start with the Excel file you already use, organise study and

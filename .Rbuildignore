@@ -1,0 +1,11 @@
+^.*\.Rproj$
+^\.Rproj\.user$
+^bayesmaDatR_hex\.png$
+^\.Rhistory$
+^\.DS_Store$
+^docs$
+^_pkgdown\.yml$
+^pkgdown$
+^vignettes$
+^inst/shiny/data_entry/rsconnect$
+^inst/shiny/data_entry/manifest\.json$
