@@ -6,3 +6,5 @@
 vignettes/.quarto/
 vignettes/articles/*_files/
 inst/shiny/data_entry/rsconnect/
+rsconnect/
+.DS_Store

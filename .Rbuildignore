@@ -9,3 +9,4 @@
 ^vignettes$
 ^inst/shiny/data_entry/rsconnect$
 ^inst/shiny/data_entry/manifest\.json$
+^rsconnect$
