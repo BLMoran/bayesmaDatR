@@ -1,0 +1,26 @@
+---
+title: "Data Entry"
+format:
+  html:
+    toc: false
+    include-in-header:
+      text: |
+        <script>document.head.insertAdjacentHTML('beforeend','<style>.container.template-quarto{max-width:100%!important}main#main{max-width:100%!important;flex:0 0 100%!important}</style>');</script>
+---
+
+The hosted data manager below runs the same app as
+`bayesmaDatR::launch_data_entry()`. Uploaded files are processed in your
+session only; run the app locally for confidential data.
+
+```{=html}
+<iframe id="bayesmadatr-app"
+        src="https://REPLACE-WITH-APP-ID.share.connect.posit.cloud/"
+        style="width: 100%; min-height: 900px; border: none; display: block;"
+        scrolling="no">
+</iframe>
+
+<script src="https://cdn.jsdelivr.net/npm/@iframe-resizer/parent@5"></script>
+<script>
+  iframeResize({ license: "GPLv3", waitForLoad: true }, "#bayesmadatr-app");
+</script>
+```

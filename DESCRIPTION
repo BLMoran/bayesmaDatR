@@ -1,0 +1,39 @@
+Package: bayesmaDatR
+Title: Manage and Prepare Data for Bayesian Meta-Analysis
+Version: 0.1.0
+Authors@R: person("Benjamin", "Moran", email = "benjaminlmoran@gmail.com", role = c("aut", "cre"))
+Description: Import, manage, validate, and prepare systematic review data for
+    Bayesian meta-analysis. Provides an interactive Shiny workbook manager,
+    outcome-specific effect-size calculations, arm-level data preparation,
+    risk-of-bias fields, and INSPECT-SR data management.
+License: MIT + file LICENSE
+URL: https://blmoran.github.io/bayesmaDatR, https://github.com/BLMoran/bayesmaDatR
+BugReports: https://github.com/BLMoran/bayesmaDatR/issues
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+Depends:
+    R (>= 4.1.0)
+Imports:
+    bslib,
+    cli,
+    dplyr (>= 1.2.0),
+    DT,
+    purrr,
+    readxl,
+    rlang,
+    shiny,
+    stats,
+    stringr,
+    tibble,
+    tidyr,
+    tools,
+    utils,
+    writexl
+Suggests:
+    MetaStan,
+    metafor,
+    metamedian,
+    testthat (>= 3.0.0),
+    withr
+Config/testthat/edition: 3
+Config/roxygen2/version: 8.1.0

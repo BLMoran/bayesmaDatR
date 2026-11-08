@@ -1,0 +1,209 @@
+# bayesmaDatR: Data Management for Bayesian Meta-Analysis
+
+![bayesmaDatR package hex logo](reference/figures/bayesmaDatR_hex.png)
+
+An interactive workbook manager and data-preparation toolkit for
+Bayesian meta-analysis. Start with the Excel file you already use,
+organise study and outcome data, then prepare arm-level or two-stage
+data for modelling.
+
+## Overview
+
+`bayesmaDatR` is designed around an **upload → manage → prepare →
+export** workflow. Use the Shiny app to work with an Excel workbook, or
+use the same data structures from an R script for a reproducible
+analysis pipeline.
+
+## Key features
+
+- **Excel-first workflow:** upload, edit, validate, and download a
+  workbook.
+- **Outcome-specific data:** keep each outcome’s sample sizes, time
+  point, summary statistics, and trial-design correlations with that
+  outcome.
+- **Multiple trial designs:** record RCT, crossover RCT, cluster RCT,
+  and cluster-crossover RCT data.
+- **Flexible summaries:** retain means and SDs, medians and quantiles,
+  ranges, event counts, and person-time.
+- **Model-ready formats:** prepare arm-level data for one-stage,
+  multivariate, multiarm, or longitudinal models, or calculate two-stage
+  `yi` and `sei`.
+- **Bias assessments:** manage the supported `robbR` tools and
+  INSPECT-SR assessments in the same workbook.
+
+## Interactive workflow
+
+``` r
+library(bayesmaDatR)
+
+launch_data_entry()
+```
+
+The workbook can contain four sheets: `studies`, `outcomes`,
+`risk_of_bias`, and `inspect_sr`. The original app’s sheet names
+`study_details`, `outcome_data`, and `rob_data` are also recognized.
+Start with
+[`template_ma_data()`](https://blmoran.github.io/bayesmaDatR/reference/template_ma_data.md)
+to see the recommended columns:
+
+``` r
+template <- template_ma_data()
+write_ma_workbook(template, "bayesmaDatR_template.xlsx")
+```
+
+## R workflow
+
+``` r
+dat <- read_ma_workbook("review.xlsx")
+validate_ma_data(dat)
+
+# Two-stage data: one row per study/outcome with yi and sei
+es_dat <- as_bayesma(
+  dat,
+  outcome = "pain_24h",
+  model_type = "two_stage",
+  measure = "MD"
+)
+
+# Arm-level data for one-stage or multivariate models
+arm_dat <- as_bayesma(
+  dat,
+  outcome = "pain_24h",
+  model_type = "one_stage"
+)
+```
+
+Supported two-stage measures include odds ratios (`OR`), risk ratios
+(`RR`), incidence-rate ratios (`IRR`), mean differences (`MD`),
+standardized mean differences (`SMD`), and differences in medians
+(`MedD`). For median-reported outcomes,
+[`convert_median_to_mean()`](https://blmoran.github.io/bayesmaDatR/reference/convert_median_to_mean.md)
+can estimate means and SDs using the Wan or quantile-estimation (`qe`)
+method. These calculations use the optional `metamedian` package.
+
+## Risk of bias and INSPECT-SR
+
+Risk-of-bias records identify both the tool and assessment level. Use
+`rob_level = "study"` for an assessment applied across a study’s
+outcomes, or `rob_level = "outcome"` when a rating applies to one
+outcome; outcome-level records require an `outcome_id`.
+
+The INSPECT-SR sheet includes the 21 assessment items and the auxiliary
+values used for the Carlisle, participant-number consistency, GRIM, and
+p-value checks.
+[`inspect_sr_columns()`](https://blmoran.github.io/bayesmaDatR/reference/inspect_sr_columns.md)
+lists the fields and
+[`inspect_sr_labels()`](https://blmoran.github.io/bayesmaDatR/reference/inspect_sr_labels.md)
+gives their display labels. INSPECT-SR judgements are recorded by the
+reviewer; the package does not infer an overall judgement from the
+auxiliary calculations.
+
+## Package status
+
+`bayesmaDatR` is under active development. The workbook, validation, and
+data preparation functions are being expanded alongside package-specific
+exporters. The current
+[`as_bayesma()`](https://blmoran.github.io/bayesmaDatR/reference/as_bayesma.md)
+interface prepares the common data frame; verify model-specific
+requirements before fitting an analysis.
+
+# Package index
+
+## Data manager
+
+Manage review workbooks interactively.
+
+- [`launch_data_entry()`](https://blmoran.github.io/bayesmaDatR/reference/launch_data_entry.md)
+  : Launch the interactive workbook data manager
+- [`data_entry_app()`](https://blmoran.github.io/bayesmaDatR/reference/data_entry_app.md)
+  : The data manager as a Shiny app object
+
+## Workbook management
+
+Create, import, combine and export review workbooks.
+
+- [`new_ma_data()`](https://blmoran.github.io/bayesmaDatR/reference/new_ma_data.md)
+  : Create a Bayesian meta-analysis data object
+
+- [`template_ma_data()`](https://blmoran.github.io/bayesmaDatR/reference/template_ma_data.md)
+  : Create a blank workbook template
+
+- [`read_ma_workbook()`](https://blmoran.github.io/bayesmaDatR/reference/read_ma_workbook.md)
+  :
+
+  Read a workbook into an `ma_data` object
+
+- [`write_ma_workbook()`](https://blmoran.github.io/bayesmaDatR/reference/write_ma_workbook.md)
+  :
+
+  Write an `ma_data` object to an Excel workbook or R data file
+
+- [`map_ma_columns()`](https://blmoran.github.io/bayesmaDatR/reference/map_ma_columns.md)
+  : Rename a section's columns to the package schema
+
+- [`merge_ma_data()`](https://blmoran.github.io/bayesmaDatR/reference/merge_ma_data.md)
+  : Combine all sections into one data frame
+
+- [`sync_ma_data()`](https://blmoran.github.io/bayesmaDatR/reference/sync_ma_data.md)
+  : Align study records across sections
+
+- [`fill_study_defaults()`](https://blmoran.github.io/bayesmaDatR/reference/fill_study_defaults.md)
+  : Fill outcome rows with their study's default values
+
+- [`split_iqr()`](https://blmoran.github.io/bayesmaDatR/reference/split_iqr.md)
+  [`split_range()`](https://blmoran.github.io/bayesmaDatR/reference/split_iqr.md)
+  : Split paired values reported in one cell
+
+## Validation and assessment fields
+
+Check workbook structure and add risk-of-bias and INSPECT-SR fields.
+
+- [`validate_ma_data()`](https://blmoran.github.io/bayesmaDatR/reference/validate_ma_data.md)
+  : Validate managed meta-analysis data
+- [`add_rob()`](https://blmoran.github.io/bayesmaDatR/reference/add_rob.md)
+  : Add risk-of-bias assessments
+- [`rob_tools()`](https://blmoran.github.io/bayesmaDatR/reference/rob_tools.md)
+  : Built-in risk-of-bias tools
+- [`rob_domains()`](https://blmoran.github.io/bayesmaDatR/reference/rob_domains.md)
+  : Domain columns for a risk-of-bias tool
+- [`rob_judgements()`](https://blmoran.github.io/bayesmaDatR/reference/rob_judgements.md)
+  : Accepted judgements for a risk-of-bias tool
+- [`inspect_sr_columns()`](https://blmoran.github.io/bayesmaDatR/reference/inspect_sr_columns.md)
+  : INSPECT-SR workbook columns
+- [`inspect_sr_labels()`](https://blmoran.github.io/bayesmaDatR/reference/inspect_sr_labels.md)
+  : INSPECT-SR field labels
+
+## Design effects
+
+Adjust cluster and crossover trials for clustering.
+
+- [`compute_design_effect()`](https://blmoran.github.io/bayesmaDatR/reference/compute_design_effect.md)
+  : Design effect for clustered and crossover trials
+- [`fill_design_effect()`](https://blmoran.github.io/bayesmaDatR/reference/fill_design_effect.md)
+  : Add the design effect column
+
+## Prepare model data
+
+Select outcomes, calculate effect sizes and export analysis-ready data.
+
+- [`select_outcome()`](https://blmoran.github.io/bayesmaDatR/reference/select_outcome.md)
+  : Select outcome rows
+- [`prepare_arm_data()`](https://blmoran.github.io/bayesmaDatR/reference/prepare_arm_data.md)
+  : Prepare arm-level data
+- [`prepare_outcome()`](https://blmoran.github.io/bayesmaDatR/reference/prepare_outcome.md)
+  : Prepare a single outcome for analysis
+- [`compute_effect_size()`](https://blmoran.github.io/bayesmaDatR/reference/compute_effect_size.md)
+  : Estimate study-level effect sizes
+- [`convert_median_to_mean()`](https://blmoran.github.io/bayesmaDatR/reference/convert_median_to_mean.md)
+  : Estimate means and standard deviations from medians and quantiles
+- [`as_bayesma()`](https://blmoran.github.io/bayesmaDatR/reference/as_bayesma.md)
+  : Export outcomes for bayesma
+- [`as_MetaStan()`](https://blmoran.github.io/bayesmaDatR/reference/as_MetaStan.md)
+  : Export one outcome for MetaStan
+
+# Articles
+
+### Articles
+
+- [Data
+  Entry](https://blmoran.github.io/bayesmaDatR/articles/data-entry.md):

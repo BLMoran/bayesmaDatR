@@ -1,0 +1,89 @@
+url: https://blmoran.github.io/bayesmaDatR
+
+template:
+  bootstrap: 5
+  bootswatch: flatly
+  bslib:
+    primary: "#153A52"
+    success: "#087E83"
+    link-color: "#087E83"
+    body-color: "#243746"
+    headings-color: "#153A52"
+
+navbar:
+  bg: primary
+  type: dark
+  structure:
+    left: [intro, data_entry, reference, news]
+    right: [github, search]
+  components:
+    intro:
+      text: Get Started
+      href: index.html
+    data_entry:
+      text: Data Entry
+      href: articles/data-entry.html
+
+repo:
+  url:
+    home: https://github.com/BLMoran/bayesmaDatR/
+    source: https://github.com/BLMoran/bayesmaDatR/blob/main/
+    issue: https://github.com/BLMoran/bayesmaDatR/issues/
+    user: https://github.com/
+
+home:
+  sidebar:
+    structure: [links, license, citation, authors, dev]
+
+reference:
+  - title: Data manager
+    desc: Manage review workbooks interactively.
+    contents:
+      - launch_data_entry
+      - data_entry_app
+  - title: Workbook management
+    desc: Create, import, combine and export review workbooks.
+    contents:
+      - new_ma_data
+      - template_ma_data
+      - read_ma_workbook
+      - write_ma_workbook
+      - map_ma_columns
+      - merge_ma_data
+      - sync_ma_data
+      - fill_study_defaults
+      - split_iqr
+  - title: Validation and assessment fields
+    desc: Check workbook structure and add risk-of-bias and INSPECT-SR fields.
+    contents:
+      - validate_ma_data
+      - add_rob
+      - rob_tools
+      - rob_domains
+      - rob_judgements
+      - inspect_sr_columns
+      - inspect_sr_labels
+  - title: Design effects
+    desc: Adjust cluster and crossover trials for clustering.
+    contents:
+      - compute_design_effect
+      - fill_design_effect
+  - title: Prepare model data
+    desc: Select outcomes, calculate effect sizes and export analysis-ready data.
+    contents:
+      - select_outcome
+      - prepare_arm_data
+      - prepare_outcome
+      - compute_effect_size
+      - convert_median_to_mean
+      - as_bayesma
+      - as_MetaStan
+
+articles:
+  - title: Articles
+    navbar: ~
+    contents:
+      - articles/data-entry
+
+news:
+  one_page: true
