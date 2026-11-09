@@ -146,16 +146,27 @@ median_difference_es <- function(d, call = rlang::caller_env()) {
 #' metamedian, from whichever of median, quartiles and range each study
 #' reports. Reported means and SDs are never overwritten. The column
 #' `mean_<arm>_method` records whether each value was `"reported"`, estimated
-#' (`"wan"` or `"qe"`), or could not be estimated (`NA`).
+#' (the `method` used), or could not be estimated (`NA`).
 #'
 #' @param data Outcome data frame in the canonical schema.
 #' @param arm Arm(s) to fill: `"int"`, `"ctrl"`, or both (the default).
 #' @param ... Unused; must be empty.
-#' @param method `"wan"` (Hozo/Wan/Bland, via metamedian's
-#'   `"hozo/wan/bland"`) or `"qe"` (quantile estimation).
+#' @param method Estimation method, passed to [metamedian::metamean()] as the
+#'   matching `mean_method` and `sd_method`:
+#'   * `"wan"`: Hozo et al. (2005), Wan et al. (2014) and Bland (2015)
+#'     (`"hozo/wan/bland"`), with Wan et al.'s SD.
+#'   * `"luo"`: Luo et al. (2018), with the Wan/Shi SD (`"wan/shi_normal"`).
+#'   * `"qe"`: quantile matching estimation (McGrath et al. 2020).
+#'   * `"bc"`: Box-Cox (McGrath et al. 2020). It uses random numbers, so it
+#'     runs with a fixed seed and leaves your random number stream unchanged.
+#'   * `"shi"`: Shi et al. (2020b), log-normal (`"shi_lognormal"`).
+#'   * `"yang"`: Yang et al. (2022), assuming normality.
+#'
+#'   SDs come from the method's own SD estimator.
 #' @return `data` with the arms' mean, SD and method columns filled in.
 #' @export
-convert_median_to_mean <- function(data, arm = c("int", "ctrl"), ..., method = c("wan", "qe")) {
+convert_median_to_mean <- function(data, arm = c("int", "ctrl"), ...,
+                                   method = c("wan", "luo", "qe", "bc", "shi", "yang")) {
   rlang::check_dots_empty()
   rlang::check_installed("metamedian", reason = "to estimate means from medians and quantiles.")
   arm <- rlang::arg_match(arm, multiple = TRUE)
@@ -174,13 +185,15 @@ estimate_arm_mean <- function(d, arm, method) {
   reported <- !is.na(d[[mean_col]]) & !is.na(d[[sd_col]])
   summaries <- median_summaries(d, arm, "g1") |>
     dplyr::select(-"mean.g1", -"sd.g1")
-  mean_method <- if (method == "wan") "hozo/wan/bland" else "qe"
+  metamedian_method <- median_mean_methods()[[method]]
   rows <- which(!reported & !is.na(summaries$med.g1) & !is.na(summaries$n.g1))
 
   estimates <- purrr::map(rows, \(i) {
     fit <- tryCatch(
-      suppressWarnings(metamedian::metamean(as.data.frame(summaries[i, ]),
-                                            mean_method = mean_method, pool_studies = FALSE)),
+      with_fixed_seed(suppressWarnings(metamedian::metamean(
+        as.data.frame(summaries[i, ]), mean_method = metamedian_method[["mean"]], se_method = "naive",
+        sd_method = metamedian_method[["sd"]], pool_studies = FALSE
+      ))),
       error = \(e) NULL
     )
     if (is.null(fit)) return(c(mean = NA_real_, sd = NA_real_))
@@ -197,4 +210,29 @@ estimate_arm_mean <- function(d, arm, method) {
     .default = NA_character_
   )
   d
+}
+
+median_mean_methods <- function() {
+  list(
+    wan = c(mean = "hozo/wan/bland", sd = "wan"),
+    luo = c(mean = "luo", sd = "wan/shi_normal"),
+    qe = c(mean = "qe", sd = "qe"),
+    bc = c(mean = "bc", sd = "bc"),
+    shi = c(mean = "shi_lognormal", sd = "shi_lognormal"),
+    yang = c(mean = "yang", sd = "yang")
+  )
+}
+
+with_fixed_seed <- function(code, seed = 1L) {
+  had_seed <- exists(".Random.seed", envir = globalenv(), inherits = FALSE)
+  old_seed <- if (had_seed) get(".Random.seed", envir = globalenv(), inherits = FALSE)
+  on.exit({
+    if (had_seed) {
+      assign(".Random.seed", old_seed, envir = globalenv())
+    } else if (exists(".Random.seed", envir = globalenv(), inherits = FALSE)) {
+      rm(".Random.seed", envir = globalenv())
+    }
+  })
+  set.seed(seed)
+  code
 }

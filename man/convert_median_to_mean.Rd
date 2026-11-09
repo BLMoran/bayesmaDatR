@@ -8,7 +8,7 @@ convert_median_to_mean(
   data,
   arm = c("int", "ctrl"),
   ...,
-  method = c("wan", "qe")
+  method = c("wan", "luo", "qe", "bc", "shi", "yang")
 )
 }
 \arguments{
@@ -18,8 +18,20 @@ convert_median_to_mean(
 
 \item{...}{Unused; must be empty.}
 
-\item{method}{\code{"wan"} (Hozo/Wan/Bland, via metamedian's
-\code{"hozo/wan/bland"}) or \code{"qe"} (quantile estimation).}
+\item{method}{Estimation method, passed to \code{\link[metamedian:metamean]{metamedian::metamean()}} as the
+matching \code{mean_method} and \code{sd_method}:
+\itemize{
+\item \code{"wan"}: Hozo et al. (2005), Wan et al. (2014) and Bland (2015)
+(\code{"hozo/wan/bland"}), with Wan et al.'s SD.
+\item \code{"luo"}: Luo et al. (2018), with the Wan/Shi SD (\code{"wan/shi_normal"}).
+\item \code{"qe"}: quantile matching estimation (McGrath et al. 2020).
+\item \code{"bc"}: Box-Cox (McGrath et al. 2020). It uses random numbers, so it
+runs with a fixed seed and leaves your random number stream unchanged.
+\item \code{"shi"}: Shi et al. (2020b), log-normal (\code{"shi_lognormal"}).
+\item \code{"yang"}: Yang et al. (2022), assuming normality.
+}
+
+SDs come from the method's own SD estimator.}
 }
 \value{
 \code{data} with the arms' mean, SD and method columns filled in.
@@ -29,5 +41,5 @@ Fills in \verb{mean_<arm>} and \verb{sd_<arm>} where they are missing, using
 metamedian, from whichever of median, quartiles and range each study
 reports. Reported means and SDs are never overwritten. The column
 \verb{mean_<arm>_method} records whether each value was \code{"reported"}, estimated
-(\code{"wan"} or \code{"qe"}), or could not be estimated (\code{NA}).
+(the \code{method} used), or could not be estimated (\code{NA}).
 }

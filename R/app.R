@@ -36,6 +36,10 @@ app_sections <- function() {
 
 protected_columns <- function() c("study_id", "outcome_id", "rob_tool", "rob_level")
 
+column_type <- function(x) {
+  if (inherits(x, "Date")) "date" else if (is.integer(x)) "integer" else if (is.numeric(x)) "numeric" else "text"
+}
+
 parse_numeric_if_possible <- function(x) {
   number <- suppressWarnings(as.numeric(x))
   if (all(is.na(number) == is_blank(x))) number else x
@@ -48,8 +52,13 @@ app_server <- function(input, output, session) {
     sel = list(rob = NULL, inspect = NULL),
     upload = NULL,
     upload_n = 0,
+    upload_file = NULL,
+    files = list(),
+    steps = list(),
     export = NULL
   )
+  upload_dir <- tempfile("bayesmaDatR_upload_")
+  session$onSessionEnded(\() unlink(upload_dir, recursive = TRUE))
   outcome_type_filter <- shiny::reactiveVal("all")
   new_outcome_type <- shiny::reactiveVal("binary")
   imp_outcomes <- shiny::reactiveVal(list(list(idx = 1L, type = "binary")))
@@ -60,20 +69,17 @@ app_server <- function(input, output, session) {
   refresh <- function(prefix = names(app_sections())) {
     for (p in prefix) rv$trigger[[p]] <- rv$trigger[[p]] + 1
   }
-  set_section <- function(prefix, df) {
-    rownames(df) <- NULL
-    rv$tables[[app_sections()[[prefix]]]] <- df
-    if (prefix %in% c("study", "outcome")) update_design_effect()
+  run_step <- function(step) {
+    data <- tryCatch(run_ma_step(current_data(), step, rv$files), error = function(e) {
+      shiny::showNotification(cli::ansi_strip(conditionMessage(e)), type = "error", duration = 12)
+      NULL
+    })
+    if (is.null(data)) return(FALSE)
+    rv$tables <- unclass(data)
+    rv$steps <- c(rv$steps, list(step))
+    TRUE
   }
-  update_design_effect <- function() {
-    tables <- rv$tables
-    if (!nrow(tables$outcomes)) return(invisible())
-    updated <- tryCatch(
-      fill_design_effect(new_ma_data(tables$studies, tables$outcomes))$outcomes$design_effect,
-      error = function(e) rep(NA_real_, nrow(tables$outcomes))
-    )
-    rv$tables$outcomes$design_effect <- updated
-  }
+  section_step <- function(fn, prefix, ...) new_step(fn, app_sections()[[prefix]], ...)
   get_section <- function(prefix) rv$tables[[app_sections()[[prefix]]]]
   current_data <- function() {
     x <- rv$tables
@@ -135,20 +141,14 @@ app_server <- function(input, output, session) {
 
       shiny::observeEvent(input[[paste0(tbl_id, "_cell_edit")]], {
         edits <- as.data.frame(input[[paste0(tbl_id, "_cell_edit")]])
-        df <- get_section(p)
-        view <- view_for(p, df)
-        for (i in seq_len(nrow(edits))) {
-          row <- view$rows[as.integer(edits$row[i])]
-          col <- view$cols[as.integer(edits$col[i])]
-          if (!isTRUE(!is.na(row) && !is.na(col)) || col == "design_effect") next
-          auto_id <- if (p == "study") make_study_id(df$author[row], df$year[row])
-          df[[col]] <- coerce_cell(df[[col]], row, edits$value[i])
-          id_is_auto <- isTRUE(is_blank(df$study_id[row]) | df$study_id[row] %in% auto_id)
-          if (p == "study" && col %in% c("author", "year") && id_is_auto) {
-            df$study_id[row] <- make_study_id(df$author[row], df$year[row])
-          }
+        view <- view_for(p, get_section(p))
+        rows <- view$rows[as.integer(edits$row)]
+        cols <- view$cols[as.integer(edits$col)]
+        ok <- !is.na(rows) & !is.na(cols) & cols != "design_effect"
+        if (any(ok)) {
+          run_step(section_step("edit_ma_cells", p, row = as.numeric(rows[ok]), column = cols[ok],
+                                value = blank_to_na(edits$value[ok])))
         }
-        set_section(p, df)
         refresh(p)
       }, priority = 100)
 
@@ -158,9 +158,8 @@ app_server <- function(input, output, session) {
           shiny::showNotification("Tick the boxes of the rows to remove first.", type = "warning")
           return()
         }
-        df <- get_section(p)
-        drop <- view_for(p, df)$rows[selected]
-        set_section(p, df[-drop, , drop = FALSE])
+        drop <- as.numeric(sort(view_for(p, get_section(p))$rows[unlist(selected)]))
+        run_step(section_step("remove_ma_rows", p, rlang::expr(dplyr::row_number() %in% !!drop)))
         refresh(p)
       })
 
@@ -178,7 +177,7 @@ app_server <- function(input, output, session) {
       })
 
       shiny::observeEvent(input[[paste0("confirm_clear_", p)]], {
-        set_section(p, get_section(p)[0, , drop = FALSE])
+        run_step(section_step("remove_ma_rows", p, TRUE))
         rv$sel[p] <- list(NULL)
         shiny::removeModal()
         refresh(p)
@@ -205,9 +204,6 @@ app_server <- function(input, output, session) {
       shiny::showNotification("No columns to manage in this section.", type = "warning")
       return()
     }
-    current_type <- function(x) {
-      if (inherits(x, "Date")) "date" else if (is.integer(x)) "integer" else if (is.numeric(x)) "numeric" else "text"
-    }
     rows <- purrr::imap(cols, \(col, i) {
       shiny::div(
         class = "row g-2 align-items-center mb-1",
@@ -216,7 +212,7 @@ app_server <- function(input, output, session) {
         shiny::div(class = "col-4", shiny::selectInput(
           paste0("mc_type_", i), if (i == 1) "Type", width = "100%",
           choices = c(Text = "text", Integer = "integer", Numeric = "numeric", Date = "date"),
-          selected = current_type(df[[col]])
+          selected = column_type(df[[col]])
         )),
         shiny::div(class = "col-2 text-end pt-3",
                    if (col %in% protected_columns()) {
@@ -249,7 +245,7 @@ app_server <- function(input, output, session) {
     sheet <- app_sections()[[prefix]]
     kept <- drop_empty_columns(df, keep = c(core_columns(sheet), protected_columns()))
     dropped <- setdiff(names(df), names(kept))
-    set_section(prefix, kept)
+    if (length(dropped)) run_step(section_step("modify_ma_columns", prefix, drop = dropped))
     shiny::removeModal()
     refresh(prefix)
     shiny::showNotification(
@@ -274,17 +270,14 @@ app_server <- function(input, output, session) {
       return()
     }
     types <- purrr::map_chr(seq_along(cols), \(i) input[[paste0("mc_type_", i)]] %||% "text")
-    df[seq_along(cols)] <- purrr::map2(df, types, \(x, type) {
-      v <- as.character(x)
-      v[is_blank(v)] <- NA
-      switch(type,
-             integer = suppressWarnings(as.integer(v)),
-             numeric = suppressWarnings(as.numeric(v)),
-             date = suppressWarnings(as.Date(v)),
-             v)
-    })
-    names(df) <- new_names
-    set_section(prefix, df[keep])
+    changed_type <- types != purrr::map_chr(df, column_type)
+    renamed <- keep & new_names != cols
+    args <- purrr::compact(list(
+      types = if (any(changed_type & keep)) stats::setNames(types, cols)[changed_type & keep],
+      drop = if (any(!keep)) cols[!keep],
+      rename = if (any(renamed)) stats::setNames(cols[renamed], new_names[renamed])
+    ))
+    if (length(args)) run_step(rlang::exec(section_step, "modify_ma_columns", prefix, !!!args))
     shiny::removeModal()
     refresh(prefix)
     shiny::showNotification(paste("Updated", section_title(prefix), "columns."), type = "message")
@@ -293,7 +286,7 @@ app_server <- function(input, output, session) {
   # ---- Study Details -----------------------------------------------------------
 
   shiny::observeEvent(input$add_study, {
-    set_section("study", bind_section(rv$tables$studies, blank_rows(rv$tables$studies)))
+    run_step(section_step("add_ma_rows", "study"))
     refresh("study")
   })
 
@@ -357,20 +350,21 @@ app_server <- function(input, output, session) {
       shiny::showNotification("Enter a new, unused column name.", type = "warning")
       return()
     }
-    values <- rep(NA_character_, nrow(df))
-    if (source != "(empty column)") {
-      src <- add_col_df()
-      text <- \(col) if (is.null(col) || col == "(none)") rep(NA_character_, nrow(src)) else as.character(src[[col]])
-      ids <- dplyr::coalesce(text(input$add_col_key_id),
-                             make_study_id(text(input$add_col_key_author), text(input$add_col_key_year)))
-      found <- match(df$study_id, ids)
-      values <- as.character(src[[source]])[found]
-      matched <- sum(!is.na(found))
-      shiny::showNotification(paste0("Matched ", matched, " of ", nrow(df), " studies."),
-                              type = if (matched) "message" else "warning")
+    if (source == "(empty column)") {
+      run_step(section_step("modify_ma_columns", "study", add = name))
+    } else {
+      keys <- c(study_id = input$add_col_key_id, author = input$add_col_key_author, year = input$add_col_key_year)
+      keys <- keys[keys != "(none)"]
+      matched <- study_column_values(df, add_col_df(), source, keys)$matched
+      step <- new_step("import_study_column", path = rv$upload_file, source = source,
+                       name = if (name != source) name, sheet = input$add_col_sheet,
+                       header_row = as.numeric(input$add_col_hdr %||% 1), keys = keys)
+      step$args <- purrr::compact(step$args)
+      if (run_step(step)) {
+        shiny::showNotification(paste0("Matched ", matched, " of ", nrow(df), " studies."),
+                                type = if (matched) "message" else "warning")
+      }
     }
-    df[[name]] <- parse_numeric_if_possible(values)
-    set_section("study", df)
     refresh("study")
     shiny::removeModal()
   })
@@ -463,14 +457,14 @@ app_server <- function(input, output, session) {
     ids <- study_ids()
     n <- max(length(ids), 1)
     name <- trimws(input$new_outcome_name %||% "")
-    rows <- blank_rows(df, n, list(
-      study_id = if (length(ids)) ids else NA_character_,
+    values <- purrr::compact(list(
+      study_id = if (length(ids)) ids,
       outcome_id = id,
-      outcome_name = if (nzchar(name)) name else NA_character_,
-      timepoint = timepoint,
+      outcome_name = if (nzchar(name)) name,
+      timepoint = if (!is.na(timepoint)) timepoint,
       measure = input$new_outcome_measure
     ))
-    set_section("outcome", bind_section(df, rows))
+    if (!run_step(rlang::exec(section_step, "add_ma_rows", "outcome", !!!values))) return()
     outcome_type_filter(new_outcome_type())
     shiny::removeModal()
     refresh("outcome")
@@ -493,26 +487,23 @@ app_server <- function(input, output, session) {
   })
 
   shiny::observeEvent(input$confirm_del_outcome, {
-    df <- rv$tables$outcomes
-    set_section("outcome", df[!df$outcome_id %in% input$del_outcome_choice, , drop = FALSE])
+    choice <- input$del_outcome_choice
+    run_step(section_step("remove_ma_rows", "outcome", rlang::call2("==", rlang::sym("outcome_id"), choice)))
     shiny::removeModal()
     refresh("outcome")
     shiny::showNotification(paste0("Removed outcome: ", input$del_outcome_choice), type = "message")
   })
 
   shiny::observeEvent(input$sync_outcome, {
-    set_section("outcome", sync_outcome_studies(rv$tables$outcomes, study_ids()))
+    run_step(section_step("sync_ma_section", "outcome"))
     refresh("outcome")
   })
 
   # ---- Risk of Bias --------------------------------------------------------------
 
   shiny::observeEvent(input$rob_tool, {
-    df <- rv$tables$risk_of_bias
-    for (nm in rob_domains(input$rob_tool)) {
-      if (!nm %in% names(df)) df[[nm]] <- rep(NA_character_, nrow(df))
-    }
-    set_section("rob", df)
+    missing_domains <- setdiff(rob_domains(input$rob_tool), names(rv$tables$risk_of_bias))
+    if (length(missing_domains)) run_step(section_step("modify_ma_columns", "rob", add = missing_domains))
     rv$sel["rob"] <- list(NULL)
   })
 
@@ -542,14 +533,12 @@ app_server <- function(input, output, session) {
   shiny::observeEvent(input$btn_rob_clear, fill_cell("rob", NA_character_))
 
   shiny::observeEvent(input$add_rob, {
-    df <- rv$tables$risk_of_bias
-    set_section("rob", bind_section(df, blank_rows(df, 1, list(rob_tool = input$rob_tool,
-                                                               rob_level = "study"))))
+    run_step(section_step("add_ma_rows", "rob", rob_tool = input$rob_tool, rob_level = "study"))
     refresh("rob")
   })
 
   shiny::observeEvent(input$sync_rob, {
-    set_section("rob", sync_rob_studies(rv$tables$risk_of_bias, study_ids(), input$rob_tool))
+    run_step(section_step("sync_ma_section", "rob", rob_tool = input$rob_tool))
     refresh("rob")
   })
 
@@ -569,7 +558,7 @@ app_server <- function(input, output, session) {
   shiny::observeEvent(input$btn_isp_clear, fill_cell("inspect", NA_character_))
 
   shiny::observeEvent(input$sync_inspect, {
-    set_section("inspect", sync_inspect_studies(rv$tables$inspect_sr, rv$tables$studies))
+    run_step(section_step("sync_ma_section", "inspect"))
     refresh("inspect")
   })
 
@@ -603,9 +592,7 @@ app_server <- function(input, output, session) {
     }
     df <- get_section(p)
     if (!isTRUE(sel$row <= nrow(df)) || !sel$col %in% names(df)) return()
-    df[[sel$col]] <- as.character(df[[sel$col]])
-    df[[sel$col]][sel$row] <- value
-    set_section(p, df)
+    run_step(section_step("edit_ma_cells", p, row = as.numeric(sel$row), column = sel$col, value = value))
     refresh(p)
   }
 
@@ -657,6 +644,11 @@ app_server <- function(input, output, session) {
       NULL
     })
     if (is.null(sheets)) return()
+    copy <- file.path(upload_dir, rv$upload_n + 1, file$name)
+    dir.create(dirname(copy), recursive = TRUE, showWarnings = FALSE)
+    file.copy(file$datapath, copy, overwrite = TRUE)
+    rv$files[[file$name]] <- copy
+    rv$upload_file <- file$name
     rv$upload <- sheets
     rv$upload_n <- rv$upload_n + 1
     imp_outcomes(list(list(idx = 1L, type = "binary")))
@@ -965,72 +957,70 @@ app_server <- function(input, output, session) {
     imp_next_idx(idx + 1L)
   }, ignoreInit = TRUE)
 
-  mapped_column <- function(id, df) {
-    sources <- input[[id]]
-    sources <- sources[sources %in% names(df)]
-    values <- purrr::map(sources, \(src) {
-      x <- as.character(df[[src]])
-      x[is_blank(x)] <- NA_character_
-      x
-    })
-    purrr::reduce(values, dplyr::coalesce, .init = rep(NA_character_, nrow(df)))
+  mapping_for <- function(id_prefix, fields, df) {
+    columns <- purrr::map(fields, \(f) intersect(input[[paste0(id_prefix, f)]], names(df))) |>
+      stats::setNames(fields)
+    purrr::discard(columns, \(x) !length(x))
   }
 
-  mapped_extra <- function(x) {
-    x <- as.character(x)
-    x[is_blank(x)] <- NA_character_
-    x
+  typed_value <- function(name) {
+    value <- trimws(input[[mid(name)]] %||% "")
+    if (nzchar(value)) value
   }
 
-  fill_from_combined <- function(rows, combined, into, split) {
-    if (all(is.na(combined))) return(rows)
-    parts <- split(combined)
-    for (i in seq_along(into)) {
-      current <- suppressWarnings(as.numeric(rows[[into[i]]]))
-      if (is.character(rows[[into[i]]]) && any(!is.na(rows[[into[i]]]) & is.na(current))) next
-      rows[[into[i]]] <- dplyr::coalesce(current, parts[[i]])
+  sheet_spec <- function(sheet, header_row, ...) {
+    purrr::compact(list(sheet = sheet, header_row = as.numeric(header_row), ...))
+  }
+
+  import_spec <- function(sections) {
+    spec <- list()
+    if ("study" %in% sections) {
+      df <- section_df("study")
+      fields <- setdiff(names(template_ma_data()$studies), c("study_id", "author", "year"))
+      extra <- intersect(input[[mid("study_extra")]], names(df))
+      spec$studies <- sheet_spec(
+        section_sheet("study"), section_header_row("study"),
+        columns = c(mapping_for(mid("study_id_"), c("study_id", "author", "year"), df),
+                    mapping_for(mid("study_"), fields, df)),
+        extra = if (length(extra)) extra
+      )
     }
-    rows
-  }
-
-  seen_studies <- shiny::reactiveVal(NULL)
-
-  section_ids <- function(sec, df, id_prefix = mid(paste0(sec, "_id_"))) {
-    author <- mapped_column(paste0(id_prefix, "author"), df)
-    year <- mapped_column(paste0(id_prefix, "year"), df)
-    ids <- dplyr::coalesce(mapped_column(paste0(id_prefix, "study_id"), df), make_study_id(author, year))
-    ids[is_blank(ids)] <- NA_character_
-    seen_studies(dplyr::bind_rows(seen_studies(), data.frame(study_id = ids, author = author, year = year)))
-    list(ids = ids, author = author, year = year)
-  }
-
-  add_seen_studies <- function(studies) {
-    seen <- seen_studies()
-    seen_studies(NULL)
-    if (is.null(seen)) return(studies)
-    seen <- seen[!is.na(seen$study_id) & !duplicated(seen$study_id), , drop = FALSE]
-    seen$year <- parse_numeric_if_possible(seen$year)
-    known <- match(studies$study_id, seen$study_id)
-    for (col in c("author", "year")) {
-      if (!col %in% names(studies)) studies[[col]] <- rep(seen[[col]][NA_integer_], nrow(studies))
-      fill <- is_blank(studies[[col]]) & !is.na(known)
-      if (any(fill)) {
-        if (is.numeric(seen[[col]])) studies[[col]] <- as.numeric(studies[[col]])
-        studies[[col]][fill] <- seen[[col]][known[fill]]
-      }
+    if ("outcome" %in% sections) {
+      spec$outcomes <- purrr::map(imp_outcomes(), \(o) {
+        ii <- o$idx
+        df <- block_df(ii)
+        fields <- c("outcome_id", "outcome_name", "timepoint", "int_arm", "ctrl_arm", outcome_type_columns(o$type),
+                    if (o$type == "continuous") names(combined_cell_columns()))
+        c(list(type = o$type),
+          sheet_spec(block_sheet(ii), block_header_row(ii),
+                     outcome_id = typed_value(paste0("imp_id_", ii)),
+                     timepoint = typed_value(paste0("imp_tp_", ii)),
+                     columns = c(mapping_for(mid(paste0("outcome_", ii, "_id_")), c("study_id", "author", "year"), df),
+                                 mapping_for(mid(paste0("outcome_", ii, "_")), fields, df))))
+      })
     }
-    new <- seen[!seen$study_id %in% studies$study_id, , drop = FALSE]
-    if (!nrow(new)) return(studies)
-    bind_section(studies, new)
+    if ("rob" %in% sections) {
+      df <- section_df("rob")
+      tool <- imp_rob_tool()
+      spec$risk_of_bias <- c(list(tool = tool), sheet_spec(
+        section_sheet("rob"), section_header_row("rob"),
+        columns = c(mapping_for(mid("rob_id_"), c("study_id", "author", "year"), df),
+                    mapping_for(mid("rob_"), c("outcome_id", "rob_level", rob_domains(tool)), df))
+      ))
+    }
+    if ("inspect" %in% sections) {
+      df <- section_df("inspect")
+      spec$inspect_sr <- sheet_spec(
+        section_sheet("inspect"), section_header_row("inspect"),
+        columns = c(mapping_for(mid("inspect_id_"), c("study_id", "author", "year"), df),
+                    mapping_for(mid("inspect_"), setdiff(inspect_sr_columns(), c("study_id", "author", "year")), df))
+      )
+    }
+    spec
   }
 
-  finish_import <- function(tables, message, sections) {
-    for (sheet in app_sections()[sections]) {
-      tables[[sheet]] <- drop_empty_columns(tables[[sheet]], keep = core_columns(sheet))
-    }
-    synced <- add_missing_studies(new_ma_data(tables$studies, tables$outcomes, tables$risk_of_bias, tables$inspect_sr))
-    rv$tables <- unclass(synced)
-    update_design_effect()
+  run_import <- function(spec, message) {
+    if (!run_step(new_step("import_ma_data", path = rv$upload_file, spec = spec))) return()
     used <- intersect(unique(rv$tables$risk_of_bias$rob_tool), rob_tools())
     if (length(used) && !input$rob_tool %in% used) shiny::updateSelectInput(session, "rob_tool", selected = used[1])
     shiny::removeModal()
@@ -1042,107 +1032,17 @@ app_server <- function(input, output, session) {
     shiny::req(rv$upload)
     known <- recognised_sheets(names(rv$upload))
     chosen <- intersect(names(known), input[[mid("sections")]] %||% names(known))
-    tables <- rv$tables
-    for (sec in chosen) {
-      df <- sheet_from_raw(rv$upload[[known[[sec]]]], section_header_row(sec))
-      if (nrow(df)) tables[[app_sections()[[sec]]]] <- standardise_section(df)
-    }
-    finish_import(tables, paste0("Loaded: ", paste(section_labels[chosen], collapse = ", "), "."), chosen)
+    if (!length(chosen)) return()
+    spec <- purrr::map(chosen, \(sec) sheet_spec(known[[sec]], section_header_row(sec), as_is = TRUE)) |>
+      stats::setNames(app_sections()[chosen])
+    run_import(spec, paste0("Loaded: ", paste(section_labels[chosen], collapse = ", "), "."))
   })
 
   shiny::observeEvent(input$confirm_import, {
     shiny::req(rv$upload)
     sections <- input[[mid("sections")]] %||% character()
-    seen_studies(NULL)
-    result <- tryCatch({
-      tables <- rv$tables
-
-      if ("study" %in% sections) {
-        df <- section_df("study")
-        id <- section_ids("study", df)
-        studies <- data.frame(study_id = id$ids, author = id$author, year = parse_numeric_if_possible(id$year))
-        for (col in setdiff(names(template_ma_data()$studies), c("study_id", "author", "year"))) {
-          studies[[col]] <- mapped_column(mid(paste0("study_", col)), df)
-        }
-        studies$trial_design <- dplyr::coalesce(normalise_trial_design(studies$trial_design), studies$trial_design)
-        for (col in setdiff(input[[mid("study_extra")]], names(studies))) {
-          if (col %in% names(df)) studies[[col]] <- parse_numeric_if_possible(mapped_extra(df[[col]]))
-        }
-        tables$studies <- studies[!is.na(studies$study_id) & !duplicated(studies$study_id), , drop = FALSE]
-      }
-
-      if ("outcome" %in% sections) {
-        for (o in imp_outcomes()) {
-          ii <- o$idx
-          df <- block_df(ii)
-          ids <- section_ids("outcome", df, id_prefix = mid(paste0("outcome_", ii, "_id_")))$ids
-          pick <- function(col, typed_id) {
-            typed <- trimws(input[[mid(paste0(typed_id, "_", ii))]] %||% "")
-            dplyr::coalesce(mapped_column(mid(paste0("outcome_", ii, "_", col)), df),
-                            if (nzchar(typed)) typed else NA_character_)
-          }
-          outcome_id <- pick("outcome_id", "imp_id")
-          if (all(is.na(outcome_id))) cli::cli_abort("Every outcome needs an Outcome ID or an outcome_id column.")
-          rows <- data.frame(study_id = ids, outcome_id = outcome_id,
-                             outcome_name = mapped_column(mid(paste0("outcome_", ii, "_outcome_name")), df),
-                             timepoint = pick("timepoint", "imp_tp"),
-                             measure = outcome_type_measure(o$type))
-          for (col in c("int_arm", "ctrl_arm", outcome_type_columns(o$type))) {
-            value <- mapped_column(mid(paste0("outcome_", ii, "_", col)), df)
-            rows[[col]] <- if (col %in% outcome_numeric_columns()) parse_numeric_if_possible(value) else value
-          }
-          if (o$type == "continuous") {
-            for (arm in c("int", "ctrl")) {
-              rows <- fill_from_combined(rows, mapped_column(mid(paste0("outcome_", ii, "_iqr_", arm)), df),
-                                         paste0(c("q1_", "q3_"), arm), split_iqr)
-              rows <- fill_from_combined(rows, mapped_column(mid(paste0("outcome_", ii, "_range_", arm)), df),
-                                         paste0(c("min_", "max_"), arm), split_range)
-            }
-          }
-          rows <- rows[!is.na(rows$study_id) & !is.na(rows$outcome_id), , drop = FALSE]
-          existing <- tables$outcomes
-          replaced <- paste(existing$outcome_id, existing$timepoint) %in% paste(rows$outcome_id, rows$timepoint)
-          tables$outcomes <- bind_section(existing[!replaced, , drop = FALSE], rows)
-        }
-      }
-
-      if ("rob" %in% sections) {
-        df <- section_df("rob")
-        tool <- imp_rob_tool()
-        rob <- data.frame(study_id = section_ids("rob", df)$ids,
-                          outcome_id = mapped_column(mid("rob_outcome_id"), df),
-                          rob_tool = tool,
-                          rob_level = mapped_column(mid("rob_rob_level"), df))
-        rob$rob_level <- dplyr::coalesce(tolower(rob$rob_level),
-                                         dplyr::if_else(is.na(rob$outcome_id), "study", "outcome"))
-        for (col in rob_domains(tool)) {
-          raw <- mapped_column(mid(paste0("rob_", col)), df)
-          rob[[col]] <- dplyr::coalesce(standardise_judgement(raw, tool), raw)
-        }
-        rob <- rob[!is.na(rob$study_id) & !duplicated(rob[c("study_id", "outcome_id", "rob_level")]), , drop = FALSE]
-        tables$risk_of_bias <- bind_section(
-          tables$risk_of_bias[!tables$risk_of_bias$rob_tool %in% tool, , drop = FALSE], rob
-        )
-      }
-
-      if ("inspect" %in% sections) {
-        df <- section_df("inspect")
-        id <- section_ids("inspect", df)
-        inspect <- data.frame(study_id = id$ids, author = id$author, year = parse_numeric_if_possible(id$year))
-        for (col in setdiff(inspect_sr_columns(), c("study_id", "author", "year"))) {
-          value <- mapped_column(mid(paste0("inspect_", col)), df)
-          inspect[[col]] <- if (col %in% c(inspect_sr_items(), "d4_3_pvalues")) value else parse_numeric_if_possible(value)
-        }
-        tables$inspect_sr <- inspect[!is.na(inspect$study_id) & !duplicated(inspect$study_id), , drop = FALSE]
-      }
-      tables$studies <- add_seen_studies(tables$studies)
-      tables
-    }, error = function(e) {
-      shiny::showNotification(paste("Import failed:", conditionMessage(e)), type = "error", duration = 12)
-      NULL
-    })
-    if (is.null(result)) return()
-    finish_import(result, paste0("Imported: ", paste(section_labels[sections], collapse = ", "), "."), sections)
+    if (!length(sections)) return()
+    run_import(import_spec(sections), paste0("Imported: ", paste(section_labels[sections], collapse = ", "), "."))
   })
 
   # ---- Validate & export -----------------------------------------------------
@@ -1165,21 +1065,23 @@ app_server <- function(input, output, session) {
                              selected = if (length(measure) == 1 && measure %in% effect_measures()) measure else "auto")
   })
 
-  export_data <- function() {
+  export_step <- function() {
     timepoint <- input$exp_timepoint
     timepoint <- if (is.null(timepoint) || timepoint %in% c("", "(All)")) NULL else timepoint
     if (!length(input$exp_outcome)) cli::cli_abort("Pick at least one outcome.")
     measure <- if (identical(input$exp_measure, "auto")) NULL else input$exp_measure
-    if (identical(input$exp_package, "MetaStan")) {
-      return(as_MetaStan(current_data(), outcome = input$exp_outcome, timepoint = timepoint,
-                         measure = measure, estimate_means = input$exp_estimate %||% "none",
-                         design_effect = input$exp_deff %||% "apply", output = "wide"))
+    shared <- list(outcome = input$exp_outcome, timepoint = timepoint, measure = measure,
+                   estimate_means = input$exp_estimate %||% "none", design_effect = input$exp_deff %||% "apply")
+    step <- if (identical(input$exp_package, "MetaStan")) {
+      rlang::exec(new_step, "as_MetaStan", !!!shared, output = "wide")
+    } else {
+      rlang::exec(new_step, "as_bayesma", !!!shared, model_type = input$exp_model_type, format = input$exp_format)
     }
-    as_bayesma(current_data(), outcome = input$exp_outcome, timepoint = timepoint,
-               model_type = input$exp_model_type, measure = measure,
-               format = input$exp_format, estimate_means = input$exp_estimate %||% "none",
-               design_effect = input$exp_deff %||% "apply")
+    step$args <- purrr::compact(step$args)
+    step
   }
+
+  export_data <- function() run_ma_step(current_data(), export_step())
 
   output$exp_package_note <- shiny::renderUI({
     if (identical(input$exp_package, "MetaStan")) {
@@ -1298,6 +1200,38 @@ app_server <- function(input, output, session) {
       write_section_file(data, file, input$dl_format)
     }
   )
+
+  output$dl_script <- shiny::downloadHandler(
+    filename = function() "bayesmaDatR_script.R",
+    content = safe_download(\(file) {
+      export <- tryCatch(export_step(), error = function(e) NULL)
+      data_dir <- input$script_dir %||% "."
+      lines <- if (identical(input$script_style, "replay")) {
+        format_ma_script(rv$steps, export, data_dir = data_dir)
+      } else {
+        tidy <- format_tidy_script(rv$steps, export, rv$files, data_dir = data_dir)
+        expected <- if (!is.null(export)) tryCatch(suppressWarnings(suppressMessages(export_data())), error = \(e) NULL)
+        if (is.null(expected)) tidy else note_tidy_check(tidy, check_tidy_script(tidy, rv$files, expected))
+      }
+      writeLines(lines, file)
+    })
+  )
+
+  can_pick_dir <- function() {
+    host <- session$clientData$url_hostname %||% ""
+    host %in% c("127.0.0.1", "localhost", "::1") && folder_picker_available()
+  }
+
+  output$pick_script_dir_ui <- shiny::renderUI({
+    if (!can_pick_dir()) return(NULL)
+    shiny::actionButton("pick_script_dir", "Choose\u2026", icon = shiny::icon("folder-open"),
+                        class = "btn-sm btn-outline-secondary", style = "margin-top:32px;")
+  })
+
+  shiny::observeEvent(input$pick_script_dir, {
+    folder <- pick_folder("Folder holding the uploaded files")
+    if (!is.null(folder)) shiny::updateTextInput(session, "script_dir", value = folder)
+  })
 
   output$tpl_all <- shiny::downloadHandler(
     filename = function() "bayesmaDatR_template.xlsx",

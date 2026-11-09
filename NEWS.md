@@ -1,6 +1,53 @@
 # bayesmaDatR 0.1.0
 
 * Initial release: workbook-to-model data manager for Bayesian meta-analysis.
+* The data manager's **Download R code** button writes a script that repeats
+  every import and edit made in the app, then the selected export. The app
+  makes each change through the new exported functions the script calls:
+  `import_ma_data()`, `import_study_column()`, `edit_ma_cells()`,
+  `add_ma_rows()`, `remove_ma_rows()`, `modify_ma_columns()` and
+  `sync_ma_section()`.
+* The R code reads the uploaded files from `data_dir`, set once at the top
+  from the Export card's "Folder holding the uploaded files" (when the app runs
+  locally, "Choose…" opens the system folder dialog). In Chrome and Edge,
+  "Download R code" opens a Save dialog to choose the folder and file name.
+* The R code comes in two styles. "Tidyverse" writes the import and wrangling
+  as readxl and dplyr code (outcome `n_int`/`n_ctrl` coalesce with the study
+  totals, e.g. `dplyr::coalesce(n_hosp_los_int, n_analysed_int)`), using
+  bayesmaDatR only for `new_ma_data()` and `as_bayesma()`. The script reads
+  each sheet into `dat` (with a `study_id` and the study columns first),
+  builds `studies`, `outcomes` and any other sections from it, combines them
+  with `new_ma_data()`, then makes an outcome-specific data frame for every
+  outcome (and every time point, for one-row-per-study layouts) using the
+  export settings. The export's own settings and outcomes give
+  `dat_outcomes`, and each outcome on its own gives `dat_<outcome>` (e.g.
+  `dat_hosp_los`). IQR and range
+  cells are split with `split_iqr()` and `split_range()`, and risk-of-bias
+  ratings are standardised with one `dplyr::across()` over the domains.
+  The risk-of-bias table is `dat_rob` and keeps each study's `author` and
+  `year`.
+* `author` and `year` columns in `risk_of_bias` are kept out of the `rob_`
+  rating columns in `as_bayesma()`, `as_MetaStan()` and `merge_ma_data()`.
+* `as_bayesma()` names risk-of-bias ratings by their domain (`D1`, ...,
+  `Overall`) rather than `rob_D1`, ..., `rob_Overall`; `rob_tool` is
+  unchanged, and a rating keeps the `rob_` prefix if its name is already taken.
+  `select_outcome()` and `merge_ma_data()` still use the prefix. The app runs it
+  before download and notes in the script if it does not reproduce the
+  export. "bayesmaDatR replay" repeats the app's own steps exactly.
+* `split_iqr()`, `split_range()` and imported IQR/range cells now split on a
+  hyphen after a number (`"3-6"`, `"2.5 - 7"`), keeping leading minus signs.
+  A new `names` argument sets the output column names, so an unnamed call
+  inside `dplyr::mutate()` adds both columns, e.g.
+  `split_iqr(iqr_int, names = c("q1_int", "q3_int"))`.
+* `estimate_means` (in `as_bayesma()`, `as_MetaStan()` and the app) and
+  `convert_median_to_mean(method = )` now offer every metamedian method:
+  `"wan"`, `"luo"`, `"qe"`, `"bc"`, `"shi"` and `"yang"`. SDs come from each
+  method's own SD estimator (previously `"qe"` derived them from a bootstrap
+  standard error), and `"bc"` runs with a fixed seed so results repeat.
+* Importing an outcome drops rows with no data for it (e.g. no mean, median
+  or events), so studies that did not report the outcome are left out.
+* Imported Study Details store numeric fields (e.g. `n_clusters`, `rho_w`) as
+  numbers rather than text.
 * `launch_data_entry()` is the card-based workbook manager from bayesma's data
   entry app, rebuilt on the bayesmaDatR schema: upload a workbook or map
   columns from any XLSX/CSV/RDA/RDS file, edit Study Details, Outcome Details,

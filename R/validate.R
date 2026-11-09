@@ -124,7 +124,7 @@ validate_rob <- function(rob, outcomes) {
   key <- dplyr::if_else(rob$rob_level %in% "outcome",
                         paste(rob$study_id, rob$outcome_id, rob$rob_level),
                         paste(rob$study_id, rob$rob_level))
-  rating_cols <- setdiff(names(rob), c("study_id", "outcome_id", "rob_level"))
+  rating_cols <- setdiff(names(rob), c("study_id", "author", "year", "outcome_id", "rob_level"))
   row_values <- do.call(paste, c(unname(rob[rating_cols]), sep = "\r"))
   dup_key <- duplicated(key) | duplicated(key, fromLast = TRUE)
   conflicting <- dup_key & stats::ave(row_values, key, FUN = \(v) length(unique(v))) > 1

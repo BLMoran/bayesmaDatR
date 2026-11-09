@@ -340,3 +340,37 @@ coerce_cell <- function(column, row, value) {
   }
   column
 }
+
+folder_picker_available <- function(os = Sys.info()[["sysname"]]) {
+  switch(os,
+    Darwin = nzchar(Sys.which("osascript")),
+    Windows = TRUE,
+    nzchar(Sys.which("zenity")) || isTRUE(capabilities("tcltk"))
+  )
+}
+
+pick_folder <- function(prompt, os = Sys.info()[["sysname"]]) {
+  folder <- tryCatch(
+    suppressWarnings(switch(os,
+      Darwin = system2("osascript", c("-e", shQuote("activate"),
+                                      "-e", shQuote(paste0('POSIX path of (choose folder with prompt "', prompt, '")'))),
+                       stdout = TRUE, stderr = FALSE),
+      Windows = utils::choose.dir(caption = prompt),
+      if (nzchar(Sys.which("zenity"))) {
+        system2("zenity", c("--file-selection", "--directory", paste0("--title=", shQuote(prompt))),
+                stdout = TRUE, stderr = FALSE)
+      } else {
+        utils::getFromNamespace("tk_choose.dir", "tcltk")(caption = prompt)
+      }
+    )),
+    error = function(e) NULL
+  )
+  clean_folder(folder)
+}
+
+clean_folder <- function(folder) {
+  if (!is.null(attr(folder, "status"))) return(NULL)
+  folder <- folder[!is.na(folder) & nzchar(folder)]
+  if (!length(folder)) return(NULL)
+  sub("(.)/$", "\\1", gsub("\\\\", "/", folder[1]))
+}

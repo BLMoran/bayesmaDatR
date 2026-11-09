@@ -300,7 +300,7 @@ merge_ma_data <- function(data) {
 
   rob <- data$risk_of_bias
   if (!rob_by_outcome && nrow(rob) && "study_id" %in% names(rob)) {
-    rob <- rob[!duplicated(rob$study_id) & !is.na(rob$study_id), setdiff(names(rob), c("outcome_id", "rob_level")),
+    rob <- rob[!duplicated(rob$study_id) & !is.na(rob$study_id), setdiff(names(rob), c("author", "year", "outcome_id", "rob_level")),
                drop = FALSE]
     rob <- rob[purrr::map_lgl(rob, \(x) any(!is.na(x)))]
     names(rob)[-1] <- paste0("rob_", sub("^rob_", "", names(rob)[-1]))

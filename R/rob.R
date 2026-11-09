@@ -146,6 +146,8 @@ add_rob <- function(data, rob, rob_tool, ..., rob_level = c("study", "outcome"))
 
 join_rob <- function(outcomes, rob, call = rlang::caller_env()) {
   if (!nrow(rob) || !"rob_level" %in% names(rob)) return(outcomes)
+  if (!"outcome_id" %in% names(rob)) rob$outcome_id <- rep(NA_character_, nrow(rob))
+  rob <- rob[setdiff(names(rob), c("author", "year"))]
   rating_cols <- setdiff(names(rob), c("study_id", "outcome_id", "rob_level"))
   prefixed <- rob |>
     dplyr::rename_with(\(x) paste0("rob_", x), dplyr::all_of(setdiff(rating_cols, "rob_tool")))

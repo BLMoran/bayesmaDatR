@@ -76,13 +76,13 @@ test_that("exports follow the study, outcome, risk-of-bias column layout", {
   expect_equal(names(one)[1:7], c("study_id", "author", "year", "trial_design", "subgroup1", "outcome_id", "measure"))
   rob_at <- match("rob_tool", names(one))
   expect_equal(names(one)[rob_at - 3:1], c("design_effect", "yi", "sei"))
-  expect_true(all(grepl("^rob_", utils::tail(names(one), 7))))
+  expect_equal(utils::tail(names(one), 7), c("rob_tool", "D1", "D2", "D3", "D4", "D5", "Overall"))
 
   dat$outcomes <- rbind(dat$outcomes, transform(dat$outcomes, outcome_id = "icu"))
   two <- as_bayesma(dat, measure = "OR")
   expect_equal(names(two)[1:7], c("study_id", "author", "year", "trial_design", "n_int", "n_ctrl", "subgroup1"))
   expect_true(match("yi_icu", names(two)) > match("sei_pain", names(two)))
-  expect_true(all(grepl("^rob_", utils::tail(names(two), 7))))
+  expect_equal(utils::tail(names(two), 7), c("rob_tool", "D1", "D2", "D3", "D4", "D5", "Overall"))
 })
 
 test_that("study columns are written in the standard order", {

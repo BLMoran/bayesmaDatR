@@ -31,7 +31,7 @@
 #' }
 #' @export
 as_MetaStan <- function(data, outcome = NULL, ..., timepoint = NULL, measure = NULL,
-                        estimate_means = c("none", "wan", "qe"),
+                        estimate_means = c("none", "wan", "luo", "qe", "bc", "shi", "yang"),
                         design_effect = c("apply", "ignore"),
                         output = c("metastan", "wide")) {
   rlang::check_dots_empty()

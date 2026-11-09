@@ -8,7 +8,7 @@
 #'   defaults (`event_*`, `mean_*`, `sd_*`, `time_*`, `median_*`, ...). For
 #'   `model_type = "two_stage"`, `yi` and `sei` are appended. Use
 #'   `study_var = study_id` (or `author` with `year_var = year`) and, for
-#'   `model_type = "bc_jung"`, `rob_var = rob_Overall`. The reported sample
+#'   `model_type = "bc_jung"`, `rob_var = Overall`. The reported sample
 #'   sizes are kept; a `design_effect` column (see [compute_design_effect()])
 #'   is added for `bayesma(design_effect = design_effect)`, and two-stage
 #'   `yi`/`sei` already use the effective sample sizes.
@@ -41,15 +41,17 @@
 #' @param format `"wide"` or `"long"`; see Description.
 #' @param estimate_means For `"MD"` and `"SMD"`: `"none"` (default) keeps
 #'   studies as reported, so studies reporting only medians are flagged as
-#'   incomplete; `"wan"` or `"qe"` first estimates missing means and SDs from
-#'   medians, quartiles and ranges with [convert_median_to_mean()].
+#'   incomplete; `"wan"`, `"luo"`, `"qe"`, `"bc"`, `"shi"` or `"yang"` first
+#'   estimates missing means and SDs from medians, quartiles and ranges with
+#'   [convert_median_to_mean()] (see its `method` argument).
 #' @param design_effect `"apply"` (default) or `"ignore"`; see
 #'   [compute_effect_size()].
 #' @return A data frame.
 #' @export
 as_bayesma <- function(data, outcome = NULL, ..., timepoint = NULL,
                        model_type = c("two_stage", "one_stage"), measure = NULL,
-                       format = c("wide", "long"), estimate_means = c("none", "wan", "qe"),
+                       format = c("wide", "long"),
+                       estimate_means = c("none", "wan", "luo", "qe", "bc", "shi", "yang"),
                        design_effect = c("apply", "ignore")) {
   rlang::check_dots_empty()
   model_type <- rlang::arg_match(model_type)
@@ -90,10 +92,20 @@ as_bayesma <- function(data, outcome = NULL, ..., timepoint = NULL,
     return(
       purrr::list_rbind(parts) |>
         prepare_arm_data(format = "long") |>
-        dplyr::rename(dplyr::any_of(c(events = "event", exposure = "time")))
+        dplyr::rename(dplyr::any_of(c(events = "event", exposure = "time"))) |>
+        drop_rob_prefix()
     )
   }
-  arrange_export(parts, data, d)
+  arrange_export(parts, data, d) |>
+    drop_rob_prefix()
+}
+
+drop_rob_prefix <- function(df) {
+  rated <- startsWith(names(df), "rob_") & !startsWith(names(df), "rob_tool")
+  plain <- sub("^rob_", "", names(df))
+  keep <- rated & !plain %in% names(df)[!rated] & !duplicated(plain)
+  names(df)[keep] <- plain[keep]
+  df
 }
 
 stat_columns <- function(d) grep("^(event|mean|sd|median|q1|q3|min|max|time)_(int|ctrl)$", names(d), value = TRUE)
@@ -208,7 +220,7 @@ check_complete <- function(d, cols, measure, label = NULL, call = rlang::caller_
       stats::setNames(shown, rep("*", length(shown))),
       if (length(missing) > 10) c("*" = "... and {length(missing) - 10} more."),
       "i" = if (measure %in% c("MD", "SMD")) {
-        "For studies reporting medians, set {.arg estimate_means} to {.val wan} or {.val qe} (needs n, median and quartiles or range), or use {.code measure = \"MedD\"}."
+        "For studies reporting medians, set {.arg estimate_means} to a method such as {.val wan} or {.val qe} (needs n, median and quartiles or range), or use {.code measure = \"MedD\"}."
       }
     ), call = call)
   }

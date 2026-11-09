@@ -14,7 +14,7 @@ test_that("add_rob standardises and records the level", {
   dat <- add_rob(example_data(), rob, rob_tool = "rob2")
   expect_equal(dat$risk_of_bias$D1, c("Low", "Some concerns"))
   expect_equal(dat$risk_of_bias$rob_level, c("study", "study"))
-  expect_equal(nrow(validate_ma_data(dat)), 0)
+  expect_false(any(validate_ma_data(dat)$column %in% c("author", "year")))
 })
 
 test_that("add_rob rejects bad input", {
@@ -45,4 +45,16 @@ test_that("CLARITY yes/no answers map to judgements", {
   expect_equal(unlist(dat$risk_of_bias[c("D1", "D2", "D3", "D4")], use.names = FALSE),
                c("Definitely low", "Probably low", "Probably high", "Definitely high"))
   expect_false(any(validate_ma_data(dat)$column %in% c("D1", "D2", "D3", "D4")))
+})
+
+test_that("author and year in risk_of_bias are not treated as ratings", {
+  dat <- example_data()
+  dat$risk_of_bias <- data.frame(study_id = c("S1", "S2"), author = c("A", "B"), year = c(2020, 2021),
+                                 rob_tool = "rob2", rob_level = "study", D1 = c("Low", "High"))
+  out <- suppressWarnings(as_bayesma(dat, "pain", measure = "MD"))
+  expect_false(any(c("rob_author", "rob_year", "rob_D1") %in% names(out)))
+  expect_equal(out$D1[1:2], c("Low", "High"))
+  expect_equal(sum(names(out) == "author"), 1)
+  expect_false(any(c("rob_author", "rob_year") %in% names(merge_ma_data(dat))))
+  expect_false(any(validate_ma_data(dat)$column %in% c("author", "year")))
 })

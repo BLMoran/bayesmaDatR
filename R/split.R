@@ -8,30 +8,40 @@
 #' @param x Character vector of paired values.
 #' @param ... Unused; must be empty.
 #' @param sep Regular expression separating the two values. The default accepts
-#'   commas, semicolons, `" to "` and en or em dashes. Hyphens are not split on
-#'   by default because they clash with negative numbers; use
-#'   `sep = "\\s+-\\s+"` for values like `"2 - 5"`.
-#' @return A tibble with one row per element of `x` and columns `q1` and `q3`
-#'   (`split_iqr()`) or `min` and `max` (`split_range()`).
+#'   commas, semicolons, `" to "`, en or em dashes, and hyphens that follow a
+#'   number (so `"2-5"` and `"-3 - -1"` split, while a leading minus sign is
+#'   kept).
+#' @param names Names of the two output columns. Inside
+#'   [dplyr::mutate()] or [dplyr::transmute()], an unnamed call adds both
+#'   columns, e.g. `split_iqr(iqr_int, names = c("q1_int", "q3_int"))`.
+#' @return A tibble with one row per element of `x` and two columns: `q1` and
+#'   `q3` (`split_iqr()`) or `min` and `max` (`split_range()`) unless `names`
+#'   says otherwise.
 #' @examples
-#' split_iqr(c("2, 5", "[1.5; 3]", "4 to 9", "7"))
+#' split_iqr(c("2, 5", "[1.5; 3]", "4 to 9", "3-6", "7"))
 #' split_range("0 to 12")
+#'
+#' tibble::tibble(iqr_int = c("3-6", "2, 5")) |>
+#'   dplyr::mutate(split_iqr(iqr_int, names = c("q1_int", "q3_int")))
 #' @export
-split_iqr <- function(x, ..., sep = default_pair_sep()) {
+split_iqr <- function(x, ..., sep = default_pair_sep(), names = c("q1", "q3")) {
   rlang::check_dots_empty()
-  split_pair(x, c("q1", "q3"), sep)
+  split_pair(x, names, sep)
 }
 
 #' @rdname split_iqr
 #' @export
-split_range <- function(x, ..., sep = default_pair_sep()) {
+split_range <- function(x, ..., sep = default_pair_sep(), names = c("min", "max")) {
   rlang::check_dots_empty()
-  split_pair(x, c("min", "max"), sep)
+  split_pair(x, names, sep)
 }
 
-default_pair_sep <- function() "\\s*[,;\u2013\u2014]\\s*|\\s+to\\s+"
+default_pair_sep <- function() "\\s*[,;\u2013\u2014]\\s*|\\s+to\\s+|(?<=\\d)\\s*-\\s*"
 
-split_pair <- function(x, into, sep) {
+split_pair <- function(x, into, sep, call = rlang::caller_env()) {
+  if (!is.character(into) || length(into) != 2 || anyNA(into) || anyDuplicated(into)) {
+    cli::cli_abort("{.arg names} must be two different column names.", call = call)
+  }
   pairs <- x |>
     as.character() |>
     stringr::str_remove_all("[\\[\\]()]") |>

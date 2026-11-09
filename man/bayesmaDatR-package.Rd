@@ -6,7 +6,18 @@
 \alias{bayesmaDatR-package}
 \title{bayesmaDatR: Manage and Prepare Data for Bayesian Meta-Analysis}
 \description{
+\if{html}{\figure{logo.png}{options: style='float: right' alt='logo' width='120'}}
+
 Import, manage, validate, and prepare systematic review data for Bayesian meta-analysis. Provides an interactive Shiny workbook manager, outcome-specific effect-size calculations, arm-level data preparation, risk-of-bias fields, and INSPECT-SR data management.
+}
+\seealso{
+Useful links:
+\itemize{
+  \item \url{https://blmoran.github.io/bayesmaDatR}
+  \item \url{https://github.com/BLMoran/bayesmaDatR}
+  \item Report bugs at \url{https://github.com/BLMoran/bayesmaDatR/issues}
+}
+
 }
 \author{
 \strong{Maintainer}: Benjamin Moran \email{benjaminlmoran@gmail.com}

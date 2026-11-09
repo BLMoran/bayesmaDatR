@@ -10,7 +10,7 @@ as_MetaStan(
   ...,
   timepoint = NULL,
   measure = NULL,
-  estimate_means = c("none", "wan", "qe"),
+  estimate_means = c("none", "wan", "luo", "qe", "bc", "shi", "yang"),
   design_effect = c("apply", "ignore"),
   output = c("metastan", "wide")
 )
@@ -30,8 +30,9 @@ as_MetaStan(
 
 \item{estimate_means}{For \code{"MD"} and \code{"SMD"}: \code{"none"} (default) keeps
 studies as reported, so studies reporting only medians are flagged as
-incomplete; \code{"wan"} or \code{"qe"} first estimates missing means and SDs from
-medians, quartiles and ranges with \code{\link[=convert_median_to_mean]{convert_median_to_mean()}}.}
+incomplete; \code{"wan"}, \code{"luo"}, \code{"qe"}, \code{"bc"}, \code{"shi"} or \code{"yang"} first
+estimates missing means and SDs from medians, quartiles and ranges with
+\code{\link[=convert_median_to_mean]{convert_median_to_mean()}} (see its \code{method} argument).}
 
 \item{design_effect}{\code{"apply"} (default) or \code{"ignore"}; see
 \code{\link[=compute_effect_size]{compute_effect_size()}}.}

@@ -37,6 +37,24 @@ test_that("convert_median_to_mean fills only missing values", {
   expect_true(d$mean_int[3] > 2 && d$mean_int[3] < 5)
 })
 
+test_that("every metamedian method estimates means and SDs reproducibly", {
+  skip_if_not_installed("metamedian")
+  for (method in c("wan", "luo", "qe", "bc", "shi", "yang")) {
+    d <- convert_median_to_mean(example_outcomes(), method = method)
+    expect_equal(d$mean_int_method[3], method)
+    expect_true(d$mean_int[3] > 2 && d$mean_int[3] < 5, label = method)
+    expect_true(d$sd_int[3] > 0, label = method)
+  }
+  set.seed(42)
+  first <- convert_median_to_mean(example_outcomes(), method = "bc")
+  after_first <- stats::runif(1)
+  set.seed(42)
+  second <- convert_median_to_mean(example_outcomes(), method = "bc")
+  expect_equal(first, second)
+  expect_equal(stats::runif(1), after_first)
+  expect_error(convert_median_to_mean(example_outcomes(), method = "mln"), "method")
+})
+
 test_that("as_bayesma can estimate means for studies reporting medians", {
   skip_if_not_installed("metamedian")
   dat <- example_data()

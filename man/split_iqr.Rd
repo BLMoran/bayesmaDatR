@@ -5,9 +5,9 @@
 \alias{split_range}
 \title{Split paired values reported in one cell}
 \usage{
-split_iqr(x, ..., sep = default_pair_sep())
+split_iqr(x, ..., sep = default_pair_sep(), names = c("q1", "q3"))
 
-split_range(x, ..., sep = default_pair_sep())
+split_range(x, ..., sep = default_pair_sep(), names = c("min", "max"))
 }
 \arguments{
 \item{x}{Character vector of paired values.}
@@ -15,13 +15,18 @@ split_range(x, ..., sep = default_pair_sep())
 \item{...}{Unused; must be empty.}
 
 \item{sep}{Regular expression separating the two values. The default accepts
-commas, semicolons, \code{" to "} and en or em dashes. Hyphens are not split on
-by default because they clash with negative numbers; use
-\code{sep = "\\\\s+-\\\\s+"} for values like \code{"2 - 5"}.}
+commas, semicolons, \code{" to "}, en or em dashes, and hyphens that follow a
+number (so \code{"2-5"} and \code{"-3 - -1"} split, while a leading minus sign is
+kept).}
+
+\item{names}{Names of the two output columns. Inside
+\code{\link[dplyr:mutate]{dplyr::mutate()}} or \code{\link[dplyr:transmute]{dplyr::transmute()}}, an unnamed call adds both
+columns, e.g. \code{split_iqr(iqr_int, names = c("q1_int", "q3_int"))}.}
 }
 \value{
-A tibble with one row per element of \code{x} and columns \code{q1} and \code{q3}
-(\code{split_iqr()}) or \code{min} and \code{max} (\code{split_range()}).
+A tibble with one row per element of \code{x} and two columns: \code{q1} and
+\code{q3} (\code{split_iqr()}) or \code{min} and \code{max} (\code{split_range()}) unless \code{names}
+says otherwise.
 }
 \description{
 Studies often report an interquartile range or a range as a single cell,
@@ -30,6 +35,9 @@ quartiles and \code{split_range()} the minimum and maximum. Cells that do not ho
 exactly two numbers give \code{NA} for both.
 }
 \examples{
-split_iqr(c("2, 5", "[1.5; 3]", "4 to 9", "7"))
+split_iqr(c("2, 5", "[1.5; 3]", "4 to 9", "3-6", "7"))
 split_range("0 to 12")
+
+tibble::tibble(iqr_int = c("3-6", "2, 5")) |>
+  dplyr::mutate(split_iqr(iqr_int, names = c("q1_int", "q3_int")))
 }

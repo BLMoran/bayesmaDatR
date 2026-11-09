@@ -48,7 +48,7 @@ test_that("app server manages studies, outcomes, RoB and export", {
 
     session$setInputs(exp_outcome = "mort", exp_timepoint = "(All)", exp_measure = "OR",
                       exp_model_type = "two_stage", exp_format = "wide", preview_btn = 1)
-    expect_equal(rv$export$df$rob_D1, "High")
+    expect_equal(rv$export$df$D1, "High")
     expect_equal(rv$export$df$yi, log((10 * 35) / (40 * 15)))
 
     session$setInputs(add_study = 2)
@@ -241,4 +241,79 @@ test_that("extra study columns keep their names and every workbook download work
     studies <- utils::read.csv(output$dl_studies)
     expect_equal(names(studies), c("study_id", "author", "year", "trial_design", "subgroup1", "subgroup2"))
   })
+})
+
+test_that("the downloaded R code rebuilds the app's data and export", {
+  skip_on_cran()
+  dir <- withr::local_tempdir()
+  writexl::write_xlsx(list(
+    Studies = data.frame(Author = c("Smith", "Jones", "Lee"), Year = c(2020, 2021, 2022),
+                         Design = c("RCT", "RCT", "RCT"), Country = c("AU", "NZ", "UK")),
+    Mortality = data.frame(Study = c("Smith 2020", "Jones 2021", "Lee 2022"),
+                           N_T = c(50, 40, 30), N_C = c(50, 42, 31), D_T = c(10, 4, 3), D_C = c(15, 6, 5))
+  ), file.path(dir, "trial data.xlsx"))
+
+  shiny::testServer(app_server, {
+    set1 <- function(name, value) do.call(session$setInputs, stats::setNames(list(value), name))
+    session$setInputs(rob_tool = "rob2", dl_format = "xlsx")
+    session$setInputs(upload_file = list(name = "trial data.xlsx", datapath = file.path(dir, "trial data.xlsx")),
+                      upload_map_btn = 1)
+    set1(mid("sections"), c("study", "outcome"))
+    set1(mid("study_id_author"), "Author")
+    set1(mid("study_id_year"), "Year")
+    set1(mid("study_trial_design"), "Design")
+    set1(mid("osheet_1"), "Mortality")
+    set1(mid("imp_id_1"), "mort")
+    set1(mid("outcome_1_id_study_id"), "Study")
+    purrr::iwalk(c(n_int = "N_T", n_ctrl = "N_C", event_int = "D_T", event_ctrl = "D_C"),
+                 \(src, col) set1(mid(paste0("outcome_1_", col)), src))
+    session$setInputs(confirm_import = 1)
+    expect_equal(rv$tables$outcomes$event_int, c(10, 4, 3))
+
+    session$setInputs(add_col_study = 1, new_col_name = "", add_col_sheet = "Studies", add_col_hdr = 1,
+                      add_col_source = "Country", add_col_key_id = "(none)", add_col_key_author = "Author",
+                      add_col_key_year = "Year", confirm_add_col = 1)
+    expect_equal(rv$tables$studies$Country, c("AU", "NZ", "UK"))
+
+    session$setInputs(otype_all = 1)
+    col <- match("event_ctrl", names(rv$tables$outcomes))
+    session$setInputs(outcome_tbl_cell_edit = list(row = 2, col = col, value = "7"))
+    session$setInputs(sync_rob = 1)
+    session$setInputs(rob_tbl_cell_clicked = list(row = 1, col = 5, value = NA), btn_rob_rob2_3 = 1)
+    session$setInputs(add_study = 1)
+    session$setInputs(study_tbl_checked = list(4), del_study = 1)
+
+    session$setInputs(exp_outcome = "mort", exp_timepoint = "(All)", exp_measure = "OR",
+                      exp_model_type = "two_stage", exp_format = "wide")
+    app_data <- current_data()
+    app_export <- export_data()
+    session$setInputs(script_style = "replay")
+    script <- readLines(output$dl_script)
+
+    withr::with_dir(dir, {
+      env <- new.env()
+      eval(parse(text = script), envir = env)
+      expect_equal(env$data, app_data)
+      expect_equal(env$analysis_data, app_export)
+    })
+    expect_true(any(grepl("trial data.xlsx", script, fixed = TRUE)))
+
+    session$setInputs(script_style = "tidy")
+    tidy <- readLines(output$dl_script)
+    expect_false(any(grepl("# Note:", tidy, fixed = TRUE)))
+    expect_true(any(grepl("readxl::read_excel", tidy, fixed = TRUE)))
+    expect_true(check_tidy_script(tidy, rv$files, app_export, result = "dat_outcomes"))
+    expect_equal(app_data$outcomes$event_ctrl, c(15, 7, 5))
+    expect_equal(app_data$risk_of_bias$D1[1], "High")
+  })
+})
+
+test_that("folder dialog results are cleaned up", {
+  expect_equal(clean_folder("/Users/me/DKA data/"), "/Users/me/DKA data")
+  expect_equal(clean_folder("C:\\Data\\DKA"), "C:/Data/DKA")
+  expect_equal(clean_folder("/"), "/")
+  expect_null(clean_folder(structure(character(), status = 1L)))
+  expect_null(clean_folder(NA_character_))
+  expect_null(clean_folder(NULL))
+  expect_true(folder_picker_available("Windows"))
 })

@@ -5,5 +5,13 @@ test_that("split_iqr and split_range separate paired cells", {
   expect_equal(out$q3, c(5, 3, 9, 3.4, NA, NA))
   expect_equal(split_range("-3, 4")$min, -3)
   expect_equal(split_iqr("2 - 5", sep = "\\s+-\\s+")$q3, 5)
+  dashed <- split_iqr(c("3-6", "2.5 - 7", "-3 - -1", "-2-5", "1-2-3"))
+  expect_equal(dashed$q1, c(3, 2.5, -3, -2, NA))
+  expect_equal(dashed$q3, c(6, 7, -1, 5, NA))
   expect_equal(nrow(split_range(character())), 0)
+  named <- tibble::tibble(iqr = c("3-6", "7")) |>
+    dplyr::mutate(split_iqr(iqr, names = c("q1_int", "q3_int")))
+  expect_equal(named$q1_int, c(3, NA))
+  expect_equal(named$q3_int, c(6, NA))
+  expect_error(split_range("1, 2", names = "lo"), "two different")
 })

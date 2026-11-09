@@ -12,7 +12,7 @@ as_bayesma(
   model_type = c("two_stage", "one_stage"),
   measure = NULL,
   format = c("wide", "long"),
-  estimate_means = c("none", "wan", "qe"),
+  estimate_means = c("none", "wan", "luo", "qe", "bc", "shi", "yang"),
   design_effect = c("apply", "ignore")
 )
 }
@@ -35,8 +35,9 @@ as_bayesma(
 
 \item{estimate_means}{For \code{"MD"} and \code{"SMD"}: \code{"none"} (default) keeps
 studies as reported, so studies reporting only medians are flagged as
-incomplete; \code{"wan"} or \code{"qe"} first estimates missing means and SDs from
-medians, quartiles and ranges with \code{\link[=convert_median_to_mean]{convert_median_to_mean()}}.}
+incomplete; \code{"wan"}, \code{"luo"}, \code{"qe"}, \code{"bc"}, \code{"shi"} or \code{"yang"} first
+estimates missing means and SDs from medians, quartiles and ranges with
+\code{\link[=convert_median_to_mean]{convert_median_to_mean()}} (see its \code{method} argument).}
 
 \item{design_effect}{\code{"apply"} (default) or \code{"ignore"}; see
 \code{\link[=compute_effect_size]{compute_effect_size()}}.}
@@ -55,7 +56,7 @@ outcome's own \code{n_int}/\code{n_ctrl} and the arm summaries named as bayesma'
 defaults (\verb{event_*}, \verb{mean_*}, \verb{sd_*}, \verb{time_*}, \verb{median_*}, ...). For
 \code{model_type = "two_stage"}, \code{yi} and \code{sei} are appended. Use
 \code{study_var = study_id} (or \code{author} with \code{year_var = year}) and, for
-\code{model_type = "bc_jung"}, \code{rob_var = rob_Overall}. The reported sample
+\code{model_type = "bc_jung"}, \code{rob_var = Overall}. The reported sample
 sizes are kept; a \code{design_effect} column (see \code{\link[=compute_design_effect]{compute_design_effect()}})
 is added for \code{bayesma(design_effect = design_effect)}, and two-stage
 \code{yi}/\code{sei} already use the effective sample sizes.

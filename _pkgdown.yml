@@ -53,6 +53,16 @@ reference:
       - sync_ma_data
       - fill_study_defaults
       - split_iqr
+  - title: Editing steps
+    desc: The steps the data manager takes, used by its downloadable R code.
+    contents:
+      - import_ma_data
+      - import_study_column
+      - edit_ma_cells
+      - add_ma_rows
+      - remove_ma_rows
+      - modify_ma_columns
+      - sync_ma_section
   - title: Validation and assessment fields
     desc: Check workbook structure and add risk-of-bias and INSPECT-SR fields.
     contents:

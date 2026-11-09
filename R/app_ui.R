@@ -158,7 +158,8 @@ app_ui <- function() {
     title = "bayesmaDatR data manager",
     shiny::tags$head(
       shiny::tags$style(shiny::HTML(app_css())),
-      shiny::tags$script(src = "https://cdn.jsdelivr.net/npm/@iframe-resizer/child@5")
+      shiny::tags$script(src = "https://cdn.jsdelivr.net/npm/@iframe-resizer/child@5"),
+      shiny::tags$script(shiny::HTML(save_as_js()))
     ),
     shiny::div(
       style = "max-width:1400px; margin:0 auto; padding:16px;",
@@ -301,8 +302,12 @@ app_ui <- function() {
           shiny::column(5, shiny::selectInput(
             "exp_estimate", "Studies reporting medians (MD / SMD)",
             choices = c("Keep as reported" = "none",
-                        "Estimate mean and SD (Wan)" = "wan",
-                        "Estimate mean and SD (quantile estimation)" = "qe")
+                        "Estimate: Hozo/Wan/Bland" = "wan",
+                        "Estimate: Luo (2018)" = "luo",
+                        "Estimate: quantile estimation (McGrath 2020)" = "qe",
+                        "Estimate: Box-Cox (McGrath 2020)" = "bc",
+                        "Estimate: Shi log-normal (2020)" = "shi",
+                        "Estimate: Yang (2022)" = "yang")
           ))
         ),
         shiny::div(
@@ -311,8 +316,24 @@ app_ui <- function() {
                               class = "btn-sm btn-outline-primary"),
           shiny::actionButton("preview_btn", "Preview export", icon = shiny::icon("eye"),
                               class = "btn-sm btn-outline-primary"),
-          shiny::downloadButton("dl_export", "Download export", class = "btn-sm btn-primary")
+          shiny::downloadButton("dl_export", "Download export", class = "btn-sm btn-primary"),
+          shiny::downloadButton("dl_script", "Download R code", icon = shiny::icon("code"),
+                                class = "btn-sm btn-outline-primary save-as",
+                                `data-filename` = "bayesmaDatR_script.R")
         ),
+        shiny::fluidRow(
+          shiny::column(5, shiny::radioButtons("script_style", "R code style:", inline = TRUE,
+                                               choices = c("Tidyverse (readxl + dplyr)" = "tidy",
+                                                           "bayesmaDatR replay (exact)" = "replay"))),
+          shiny::column(5, shiny::textInput("script_dir", "Folder holding the uploaded files", width = "100%",
+                                            placeholder = "e.g. ~/Projects/DKA/data (blank: working directory)")),
+          shiny::column(2, shiny::uiOutput("pick_script_dir_ui"))
+        ),
+        shiny::p(class = "text-muted small mb-1",
+                 "The R code repeats every import and edit made here, then this export. It reads the ",
+                 "uploaded files from the folder above (", shiny::code("data_dir"), " at the top of the code). ",
+                 "The tidyverse version only needs bayesmaDatR for the last steps; the replay version ",
+                 "repeats the app's own steps."),
         shiny::uiOutput("export_msg"),
         DT::DTOutput("export_tbl")
       ),
@@ -363,4 +384,32 @@ app_ui <- function() {
       shiny::tags$br()
     )
   )
+}
+
+save_as_js <- function() {
+  "
+$(document).on('click', 'a.save-as', async function(e) {
+  if (!window.showSaveFilePicker || !this.href) return;
+  e.preventDefault();
+  var link = this;
+  try {
+    var handle = await window.showSaveFilePicker({
+      suggestedName: $(link).data('filename'),
+      types: [{description: 'R script', accept: {'text/plain': ['.R']}}]
+    });
+    var blob = await fetch(link.href).then(function(r) { return r.blob(); });
+    var writable = await handle.createWritable();
+    await writable.write(blob);
+    await writable.close();
+  } catch (err) {
+    if (err.name === 'AbortError') return;
+    var fallback = document.createElement('a');
+    fallback.href = link.href;
+    fallback.download = $(link).data('filename');
+    document.body.appendChild(fallback);
+    fallback.click();
+    fallback.remove();
+  }
+});
+"
 }
